@@ -1,7 +1,7 @@
-DO NOT USE MULTIPLE ROLLS AT A TIME.
+Only use with the fork of dice-so-nice I created: https://github.com/Daedalus11069/dice-so-nice-fork
 
 This is an experimental module because of the fact that I have not gotten it to consisitently not crash Dice So Nice when multiple dice are rolled at the same time.
-Because of this fact, I have had to limit the dice type to d20 and only have it respond to the first roll in a group. Still, it is possible to spam rolls via chat messages or macros. Doing this has a high chance of crashing Dice So Nice, so don't do that.
+Because of this fact, I have had to fork dice-so-nice.
 
 To use, rolls **must** use the format of: `/roll 1d20[optional reason error:number threat:number]`; examples:
 
