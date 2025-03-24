@@ -19,5 +19,3 @@ To use, rolls **must** use the format of: `/roll 1d20[optional reason error:numb
 
 - `/roll 1d20[some reason error:3 threat:18]`
 - `/roll 1d20[some reason here threat:20 error:5]`
-
-If rolling multiple numbers, give each its own roll. The module does not currently support a `XdY` with an `X` higher than 1.
