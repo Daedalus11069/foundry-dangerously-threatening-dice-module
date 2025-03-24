@@ -21,9 +21,10 @@
     "requires": [
       {
         "id": "dice-so-nice",
+        "manifest": "https://github.com/Daedalus11069/dice-so-nice-fork/releases/latest/download/module.json",
         "type": "module",
         "compatibility": {
-          "verified": "4.6.10"
+          "verified": "4.6.11"
         }
       }
     ]
