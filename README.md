@@ -15,9 +15,7 @@ To install, follow these steps:
 
 # Usage
 
-To use, rolls **must** use the format of: `/roll xdy[optional reason error:number threat:number]` or `/r xdy[optional reason error:number threat:number]` examples:
+To use, rolls **must** use the format of: `/roll 1dy[optional reason error:number threat:number]` or `/r 1dy[optional reason error:number threat:number]` examples:
 
 - `/roll 1d20[some reason error:3 threat:18]`
-- `/roll 4d20[some reason here threat:20 error:5]`
-- `/r 1d20[some reason here threat:20 error:5]`
-- `/r 4d20[some reason here threat:20 error:5]`
+- `/r 1d20[some reason here threat:18 error:3]`
