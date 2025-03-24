@@ -18,4 +18,4 @@ To install, follow these steps:
 To use, rolls **must** use the format of: `/roll 1d20[optional reason error:number threat:number]`; examples:
 
 - `/roll 1d20[some reason error:3 threat:18]`
-- `/roll 1d20[some reason here threat:20 error:5]`
+- `/roll 4d20[some reason here threat:20 error:5]`
