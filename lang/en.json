@@ -1,8 +1,16 @@
 {
   "DANGEROUSLYTHREATENINGDICE": {
+    "failDice": {
+      "AllowedName": "Failure Animation Dice",
+      "AllowedHint": "Dice Types that the Failure Animation plays on"
+    },
     "failureAnimationName": {
       "AllowedName": "Failure Animation Name",
       "AllowedHint": "Animation name tha plays on failure"
+    },
+    "critDice": {
+      "AllowedName": "Critical Animation Dice",
+      "AllowedHint": "Dice Types that the Critical Animation plays on"
     },
     "critAnimationName": {
       "AllowedName": "Critical Animation Name",

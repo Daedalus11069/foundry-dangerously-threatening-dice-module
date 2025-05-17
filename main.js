@@ -1,4 +1,13 @@
 Hooks.once("init", async function () {
+  game.settings.register("dangerously-threatening-dice", "failDice", {
+    scope: "world",
+    config: true,
+    name: "DANGEROUSLYTHREATENINGDICE.failDice.AllowedName",
+    hint: "DANGEROUSLYTHREATENINGDICE.failDice.AllowedHint",
+    type: String,
+    default: "d20"
+  });
+
   game.settings.register(
     "dangerously-threatening-dice",
     "failureAnimationName",
@@ -11,6 +20,15 @@ Hooks.once("init", async function () {
       default: "PlayAnimationParticleVortex"
     }
   );
+
+  game.settings.register("dangerously-threatening-dice", "critDice", {
+    scope: "world",
+    config: true,
+    name: "DANGEROUSLYTHREATENINGDICE.critDice.AllowedName",
+    hint: "DANGEROUSLYTHREATENINGDICE.critDice.AllowedHint",
+    type: String,
+    default: "d20,d12,d10,d8"
+  });
 
   game.settings.register("dangerously-threatening-dice", "critAnimationName", {
     scope: "world",
@@ -26,6 +44,27 @@ Hooks.on("diceSoNiceRollStart", (messageId, context) => {
   function rangeArrayFrom(n, m) {
     return Array.from({ length: m - n + 1 }, (_, index) => `${n + index}`);
   }
+  function mapConfigIntoDice(dice) {
+    if (isNaN(dice)) {
+      return dice;
+    } else {
+      return `d${dice}`;
+    }
+  }
+  const failDice = (
+    game.settings.get("dangerously-threatening-dice", "failDice") || ""
+  )
+    .toLowerCase()
+    .split(/, ?/)
+    .filter(d => d !== "")
+    .map(mapConfigIntoDice);
+  const critDice = (
+    game.settings.get("dangerously-threatening-dice", "critDice") || ""
+  )
+    .toLowerCase()
+    .split(/, ?/)
+    .filter(d => d !== "")
+    .map(mapConfigIntoDice);
 
   for (const dice of context.roll.dice) {
     const reg = /threat:(?<threat>\d+)|error:(?<error>\d+)/gi;
@@ -51,16 +90,24 @@ Hooks.on("diceSoNiceRollStart", (messageId, context) => {
     if (typeof dice.options.onResultEffects === "undefined") {
       dice.options.onResultEffects = {};
     }
-    dice.options.onResultEffects[
-      game.settings.get("dangerously-threatening-dice", "failureAnimationName")
-    ] = {
-      onResult: rangeArrayFrom(1, error)
-    };
 
-    dice.options.onResultEffects[
-      game.settings.get("dangerously-threatening-dice", "critAnimationName")
-    ] = {
-      onResult: rangeArrayFrom(threat, dice.faces)
-    };
+    if (failDice.includes(`d${dice.faces}`)) {
+      dice.options.onResultEffects[
+        game.settings.get(
+          "dangerously-threatening-dice",
+          "failureAnimationName"
+        )
+      ] = {
+        onResult: rangeArrayFrom(1, error)
+      };
+    }
+
+    if (critDice.includes(`d${dice.faces}`)) {
+      dice.options.onResultEffects[
+        game.settings.get("dangerously-threatening-dice", "critAnimationName")
+      ] = {
+        onResult: rangeArrayFrom(threat, dice.faces)
+      };
+    }
   }
 });
