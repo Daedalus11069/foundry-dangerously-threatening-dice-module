@@ -24,7 +24,7 @@
         "manifest": "https://github.com/Daedalus11069/dice-so-nice-fork/releases/latest/download/module.json",
         "type": "module",
         "compatibility": {
-          "verified": "4.6.11"
+          "verified": "4.6.12"
         }
       }
     ]

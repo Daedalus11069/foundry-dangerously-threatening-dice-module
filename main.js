@@ -1,4 +1,8 @@
 Hooks.on("diceSoNiceRollStart", (messageId, context) => {
+  function rangeArrayFrom(n, m) {
+    return Array.from({ length: m - n + 1 }, (_, index) => `${n + index}`);
+  }
+
   for (const dice of context.roll.dice) {
     const reg = /threat:(?<threat>\d+)|error:(?<error>\d+)/gi;
     let match;
@@ -20,25 +24,18 @@ Hooks.on("diceSoNiceRollStart", (messageId, context) => {
       threat = dice.faces;
     }
 
-    if (dice.values[0] <= error) {
-      dice.options.sfx = {
-        specialEffect: "PlayAnimationParticleVortex"
+    if (typeof dice.options.onResultEffects === "undefined") {
+      dice.options.onResultEffects = {};
+    }
+    if (typeof groups.error !== "undefined") {
+      dice.options.onResultEffects.PlayAnimationParticleVortex = {
+        onResult: rangeArrayFrom(1, error)
       };
-    } else if (dice.values[0] >= threat) {
-      dice.options.sfx = {
-        specialEffect: "PlayAnimationParticleSpiral"
+    }
+    if (typeof groups.threat !== "undefined") {
+      dice.options.onResultEffects.PlayAnimationParticleSpiral = {
+        onResult: rangeArrayFrom(threat, dice.faces)
       };
     }
   }
-
-  // Hooks.on("diceSoNiceRollComplete", messageId => {
-  //   const message = game.messages.get(messageId);
-  //   for (const roll of message.rolls) {
-  //     if (roll.dice[0].options.content) {
-  //       ChatMessage.create({
-  //         content: `${roll.dice[0].options.content} = ${roll.total}`
-  //       });
-  //     }
-  //   }
-  // });
 });

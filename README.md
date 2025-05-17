@@ -3,7 +3,7 @@ Only use with the fork of dice-so-nice I created: https://github.com/Daedalus110
 # Preamble
 
 This is an experimental module because of the fact that I have not gotten it to consisitently not crash Dice So Nice when multiple dice are rolled at the same time.
-Because of this fact, I have had to fork dice-so-nice.
+Because of this fact, I have had to fork dice-so-nice; the fork does not have this problem.
 
 # Installation
 
@@ -15,7 +15,7 @@ To install, follow these steps:
 
 # Usage
 
-To use, rolls **must** use the format of: `/roll 1dy[optional reason error:number threat:number]` or `/r 1dy[optional reason error:number threat:number]` examples:
+To use, rolls **must** use the format of: `/roll xdy[optional reason error:number threat:number]` or `/r xdy[optional reason error:number threat:number]` examples:
 
 - `/roll 1d20[some reason error:3 threat:18]`
-- `/r 1d20[some reason here threat:18 error:3]`
+- `/r 4d20[some reason here threat:18 error:3]`
