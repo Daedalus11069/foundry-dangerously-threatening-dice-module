@@ -1,11 +1,21 @@
-DO NOT USE MULTIPLE ROLLS AT A TIME.
+Only use with the fork of dice-so-nice I created: https://github.com/Daedalus11069/dice-so-nice-fork
+
+# Preamble
 
 This is an experimental module because of the fact that I have not gotten it to consisitently not crash Dice So Nice when multiple dice are rolled at the same time.
-Because of this fact, I have had to limit the dice type to d20 and only have it respond to the first roll in a group. Still, it is possible to spam rolls via chat messages or macros. Doing this has a high chance of crashing Dice So Nice, so don't do that.
+Because of this fact, I have had to fork dice-so-nice.
 
-To use, rolls **must** use the format of: `/roll 1d20[optional reason error:number threat:number]`; examples:
+# Installation
+
+To install, follow these steps:
+
+1.  Inside Foundry, select the Game Modules tab in the Configuration and Setup menu.
+2.  Click the Install Module button and enter the following URL: https://github.com/Daedalus11069/foundry-dangerously-threatening-dice-module/releases/latest/download/module.json
+3.  Click Install and wait for installation to complete.
+
+# Usage
+
+To use, rolls **must** use the format of: `/roll 1dy[optional reason error:number threat:number]` or `/r 1dy[optional reason error:number threat:number]` examples:
 
 - `/roll 1d20[some reason error:3 threat:18]`
-- `/roll 1d20[some reason here threat:20 error:5]`
-
-If rolling multiple numbers, give each its own roll. The module does not currently support a `XdY` with an `X` higher than 1.
+- `/r 1d20[some reason here threat:18 error:3]`
