@@ -1,0 +1,12 @@
+{
+  "DANGEROUSLYTHREATENINGDICE": {
+    "failureAnimationName": {
+      "AllowedName": "Failure Animation Name",
+      "AllowedHint": "Animation name tha plays on failure"
+    },
+    "critAnimationName": {
+      "AllowedName": "Critical Animation Name",
+      "AllowedHint": "Animation name tha plays on critical"
+    }
+  }
+}
