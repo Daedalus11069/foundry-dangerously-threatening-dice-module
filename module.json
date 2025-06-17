@@ -7,11 +7,11 @@
       "name": "Daedalus11069"
     }
   ],
-  "version": "0.1.0",
+  "version": "0.2.6",
   "compatibility": {
     "minimum": "11",
     "verified": "11",
-    "maximum": "11"
+    "maximum": "12"
   },
   "esmodules": ["main.js"],
   "languages": [
@@ -22,8 +22,8 @@
     }
   ],
   "url": "https://github.com/Daedalus11069/foundry-dangerously-threatening-dice-module",
-  "manifest": "https://raw.githubusercontent.com/Daedalus11069/foundry-dangerously-threatening-dice-module/main/module.json",
-  "download": "https://github.com/Daedalus11069/foundry-dangerously-threatening-dice-module/releases/download/v0.1.0/dangerously-threatening-dice_0.1.0.zip",
+  "manifest": "https://github.com/Daedalus11069/foundry-dangerously-threatening-dice-module/releases/latest/download/module.json",
+  "download": "https://github.com/Daedalus11069/foundry-dangerously-threatening-dice-module/releases/download/v0.2.6/module.zip",
   "relationships": {
     "requires": [
       {
@@ -31,7 +31,7 @@
         "manifest": "https://github.com/Daedalus11069/dice-so-nice-fork/releases/latest/download/module.json",
         "type": "module",
         "compatibility": {
-          "verified": "4.6.12"
+          "verified": "5.1.9"
         }
       }
     ]
