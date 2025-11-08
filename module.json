@@ -7,10 +7,10 @@
       "name": "Daedalus11069"
     }
   ],
-  "version": "0.2.6",
+  "version": "1.0.0",
   "compatibility": {
     "minimum": "11",
-    "verified": "11",
+    "verified": "12",
     "maximum": "12"
   },
   "esmodules": ["main.js"],
@@ -23,7 +23,7 @@
   ],
   "url": "https://github.com/Daedalus11069/foundry-dangerously-threatening-dice-module",
   "manifest": "https://github.com/Daedalus11069/foundry-dangerously-threatening-dice-module/releases/latest/download/module.json",
-  "download": "https://github.com/Daedalus11069/foundry-dangerously-threatening-dice-module/releases/download/v0.2.6/module.zip",
+  "download": "https://github.com/Daedalus11069/foundry-dangerously-threatening-dice-module/releases/download/v1.0.0/module.zip",
   "relationships": {
     "requires": [
       {
