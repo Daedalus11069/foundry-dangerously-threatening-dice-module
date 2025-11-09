@@ -99,7 +99,9 @@ Hooks.on("diceSoNiceRollStart", (messageId, context) => {
     function parsePair(pair, faces, defaultIsThreat) {
       if (!pair || typeof pair.raw === "undefined") {
         // default: for error -> 1, for threat -> faces
-        return null;
+        return defaultIsThreat
+          ? { n: faces, dir: null, autoHigh: false }
+          : { n: 1, dir: null, autoHigh: false };
       }
       let n = window.parseInt(pair.raw, 10);
       if (isNaN(n) || n <= 0) {
@@ -122,7 +124,7 @@ Hooks.on("diceSoNiceRollStart", (messageId, context) => {
     const clamp = v => Math.max(1, Math.min(dice.faces, v));
 
     // Compute error range: default 1..n, but if dir==='h' or autoHigh then top-end
-    if (failDice.includes(`d${dice.faces}`) && parsedError) {
+    if (failDice.includes(`d${dice.faces}`)) {
       let start, end;
       if (parsedError.dir === "h" || parsedError.autoHigh) {
         // high anchored: top N values -> faces-(n-1) .. faces
@@ -144,18 +146,14 @@ Hooks.on("diceSoNiceRollStart", (messageId, context) => {
       };
     }
 
-    // Compute threat range: default n..faces, but if dir==='h' or autoHigh then top-end
-    if (critDice.includes(`d${dice.faces}`) && parsedThreat) {
+    // Compute threat range: threat value is the upper bound (start of threat range)
+    // threat:19 means 19-20 (not 2-20), threat:18 means 18-20, etc.
+    if (critDice.includes(`d${dice.faces}`)) {
       let start, end;
-      if (parsedThreat.dir === "h" || parsedThreat.autoHigh) {
-        // high anchored: top N values -> faces-(n-1) .. faces
-        start = clamp(dice.faces - (parsedThreat.n - 1));
-        end = clamp(dice.faces);
-      } else {
-        // low anchored: n .. faces
-        start = clamp(parsedThreat.n);
-        end = clamp(dice.faces);
-      }
+      // Always treat threat as upper bound: n .. faces
+      start = clamp(parsedThreat.n);
+      end = clamp(dice.faces);
+
       dice.options.onResultEffects[
         game.settings.get("dangerously-threatening-dice", "critAnimationName")
       ] = {
