@@ -29,6 +29,8 @@ This module enhances your Foundry VTT dice rolls by triggering special visual an
 - **Critical/Threat Animations**: Play special effects when dice roll high values (e.g., natural 20s)
 - **Error/Failure Animations**: Play special effects when dice roll low values (e.g., natural 1s)
 - **Flexible Range Configuration**: Define custom threat and error ranges with multiple syntax options
+- **Smart Overlap Handling**: Explicitly set values always win — setting `threat:1` means rolling 1 is a critical, not a fumble
+- **d100 Special Handling**: No default animations for d100 (must be explicitly set); when triggered, both dice light up based on the total rolled
 - **Configurable Per Dice Type**: Set which dice types trigger animations
 - **Customizable Animations**: Choose which Dice So Nice animations to play
 
@@ -87,70 +89,107 @@ or shorthand:
 
 ### Advanced Syntax
 
-The module now supports **directional anchoring** with optional `H` or `L` suffixes:
+The module supports **directional anchoring** with optional `H` or `L` suffixes, allowing you to handle both **roll-over** (D&D style) and **roll-under** (Call of Cthulhu style) systems:
 
 ```
 threat:N[H|L]
 error:N[H|L]
 ```
 
+### Understanding Roll-Over vs Roll-Under Systems
+
+| System Type    | Good Rolls   | Bad Rolls    | Examples               |
+| -------------- | ------------ | ------------ | ---------------------- |
+| **Roll-Over**  | High numbers | Low numbers  | D&D, Pathfinder        |
+| **Roll-Under** | Low numbers  | High numbers | Call of Cthulhu, GURPS |
+
 **Direction Modifiers:**
 
-- **No suffix (default)**: Auto-detects based on value
-  - `error:3` on d20 → rolls 1-3 (low range)
-  - `error:99` on d100 → rolls 99-100 (high range, auto-detected)
-  - `threat:18` on d20 → rolls 18-20 (high range, auto-detected)
-- **`H` (High-anchored)**: Always counts from the highest values
-  - `error:3H` on d20 → rolls 18-20 (top 3 results)
-  - `threat:2H` on d20 → rolls 19-20 (top 2 results)
-- **`L` (Low-anchored)**: Always counts from the lowest values
-  - `error:3L` on d20 → rolls 1-3 (bottom 3 results)
-  - `threat:3L` on d20 → rolls 3-20 (from 3 to max)
+- **`L` (Low-anchored)**: Range starts from 1
+  - `threat:5L` on d100 → rolls 1-5 (critical success in roll-under systems)
+  - `error:3L` on d20 → rolls 1-3 (fumble in roll-over systems)
+- **`H` (High-anchored)**: Range ends at max die value
+  - `error:95H` on d100 → rolls 95-100 (fumble in roll-under systems)
+  - `threat:18H` on d20 → rolls 18-20 (critical in roll-over systems)
+- **No suffix (default)**: Smart defaults based on typical usage
+  - `threat:N` — if N ≤ faces/2, treated as low-anchored (1 to N); if N > faces/2, treated as high-anchored (N to max)
+  - `error:N` — if N ≤ faces/2, treated as low-anchored (1 to N); if N > faces/2, treated as high-anchored (N to max)
 
-**Auto-Detection Logic:**
+**Smart Auto-Detection Logic:**
 
-- If the value is **greater than half the dice faces** and no direction is specified, it's treated as high-anchored
-- Example: `threat:15` on d20 automatically becomes the top 6 values (15-20) because 15 > 10
+- **Threat values**: `threat:1` on d20 → just 1 (smart low-anchor), `threat:18` on d20 → 18-20 (smart high-anchor)
+- **Error values**: `error:1` on d20 → just 1 (low-anchor), `error:95` on d100 → 95-100 (auto high-anchor)
+- The threshold is half the dice faces (10 for d20, 50 for d100)
+
+**Overlap Handling:**
+
+- When threat and error ranges would overlap, **explicitly set values take priority**
+- Example: `threat:1` removes 1 from the default error range — rolling 1 triggers only the critical animation
+- Example: `error:20H` removes 20 from the default threat range — rolling 20 triggers only the fumble animation
+- This allows full flexibility for any game system
 
 ### Examples
 
-#### Basic Examples
+#### Roll-Over System Examples (D&D, Pathfinder)
+
+In roll-over systems, **high rolls are good** and **low rolls are bad**.
 
 ```
 /roll 1d20[Attack Roll error:1 threat:20]
 ```
 
-- Error animation on rolling 1
-- Threat animation on rolling 20
+- Error animation on rolling 1 (natural fumble)
+- Threat animation on rolling 20 (natural crit)
 
 ```
 /r 1d20[Skill Check error:3 threat:18]
 ```
 
-- Error animation on rolls 1-3
-- Threat animation on rolls 18-20
+- Error animation on rolls 1-3 (fumble range)
+- Threat animation on rolls 18-20 (critical range)
 
 ```
 /roll 4d6[Damage threat:6]
 ```
 
-- Threat animation on any die showing 6
+- Threat animation on any die showing 6 (max damage!)
 - No error animation (not specified)
 
-#### Advanced Anchoring Examples
+#### Roll-Under System Examples (Call of Cthulhu, GURPS)
+
+In roll-under systems, **low rolls are good** and **high rolls are bad**.
+
+> **Note about d100:** Unlike other dice, d100 has **no default animations**. This is because Dice So Nice often renders d100 as two d10s (tens and ones), and a "1" showing on one die could represent 1, 11, 21, 31, etc. You must explicitly set `threat:` and `error:` values for d100 rolls. When the total IS in the specified range, **both dice will light up** with the animation effect.
 
 ```
-/roll 1d100[Percentile Check error:5 threat:95]
+/roll 1d100[Spot Hidden threat:5L error:95H]
 ```
 
-- Error: 1-5 (low range, auto-detected)
-- Threat: 95-100 (high range, auto-detected)
+- Threat (critical success): 1-5 (rolling very low is amazing) — both dice glow!
+- Error (fumble): 95-100 (rolling very high is a disaster) — both dice glow!
 
 ```
-/r 1d20[Fumble Check error:3H]
+/r 1d100[Sanity Check threat:1L error:100H]
 ```
 
-- Error: 18-20 (top 3 values, explicitly high-anchored)
+- Threat: rolling 1 (perfect success)
+- Error: rolling 100 (catastrophic failure)
+
+```
+/roll 1d100[Luck Roll threat:10L error:96H]
+```
+
+- Threat (extreme success): 1-10
+- Error (fumble): 96-100
+
+#### Mixed/Custom Examples
+
+```
+/r 1d20[Custom threat:2H error:2L]
+```
+
+- Threat: 19-20 (top 2 values)
+- Error: 1-2 (bottom 2 values)
 
 ```
 /roll 1d12[Wild Magic threat:2H]
@@ -158,12 +197,31 @@ error:N[H|L]
 
 - Threat: 11-12 (top 2 values)
 
+#### Overlap Handling Examples
+
+When you want a value to be a critical instead of a fumble (or vice versa):
+
 ```
-/r 1d20[Custom threat:10L error:2H]
+/roll 1d20[Inverted threat:1]
 ```
 
-- Threat: 10-20 (from 10 to max, low-anchored)
-- Error: 19-20 (top 2 values, high-anchored)
+- Threat: 1 (rolling 1 is now a CRITICAL, not a fumble!)
+- Error: (default 1 is excluded) — no error animation on 1
+
+```
+/r 1d20[Cursed Blade error:20H]
+```
+
+- Error: 20 (rolling 20 is now a FUMBLE, not a critical!)
+- Threat: (default 20 is excluded) — no threat animation on 20
+
+```
+/roll 1d20[Chaotic threat:1 error:20H]
+```
+
+- Threat: 1 (low roll = critical success)
+- Error: 20 (high roll = fumble)
+- Completely inverted from normal D&D rules!
 
 #### Multiple Dice Examples
 
@@ -240,16 +298,32 @@ The Dice So Nice animation to play on critical successes/threats.
 
 ```javascript
 // Error (Failure) Range
-If direction is 'H' or value > faces/2:
-  Range = [faces - (N - 1), faces]  // Top N values
+If direction is 'H' (explicit high-anchor):
+  If N > faces/2:  Range = [N, faces]      // From N to max (e.g., 95-100)
+  Else:            Range = [faces-N+1, faces]  // Top N values (e.g., top 3 = 18-20)
+Else If direction is 'L' (explicit low-anchor):
+  Range = [1, N]  // Bottom values
+Else If N > faces/2 (auto-detect high):
+  Range = [N, faces]  // From N to max
 Else:
-  Range = [1, N]  // Bottom N values
+  Range = [1, N]  // Default: bottom values
 
 // Threat (Critical) Range
-If direction is 'H' or value > faces/2:
-  Range = [faces - (N - 1), faces]  // Top N values
+If direction is 'L' (explicit low-anchor - roll-under systems):
+  Range = [1, N]  // Bottom values (e.g., 1-5 for crit success)
+Else If direction is 'H' (explicit high-anchor):
+  If N > faces/2:  Range = [N, faces]      // From N to max
+  Else:            Range = [faces-N+1, faces]  // Top N values
+Else If N <= faces/2 (smart low-anchor):
+  Range = [1, N]  // Low values (e.g., threat:1 = just 1)
 Else:
-  Range = [N, faces]  // From N to max
+  Range = [N, faces]  // High values (e.g., threat:18 = 18-20)
+
+// Overlap Resolution
+If user explicitly set threat:
+  Remove threat values from error range
+If user explicitly set error:
+  Remove error values from threat range
 ```
 
 ### Supported Dice Types
@@ -305,6 +379,27 @@ Any standard polyhedral dice: d4, d6, d8, d10, d12, d20, d100, etc.
 ---
 
 ## Changelog
+
+### v1.2.0
+
+- **Smart Overlap Handling**: Explicitly set threat/error values now take priority over defaults
+  - `threat:1` means rolling 1 is a critical, NOT a fumble (removes 1 from error range)
+  - `error:20H` means rolling 20 is a fumble, NOT a critical (removes 20 from threat range)
+- **Improved Auto-Detection**: `threat:N` now smartly detects low vs high anchor based on value
+  - `threat:1` on d20 → just 1 (not 1-20!)
+  - `threat:5` on d20 → 1-5 (low anchor since 5 ≤ 10)
+  - `threat:18` on d20 → 18-20 (high anchor since 18 > 10)
+- **d100 Special Handling**: No default animations for d100 rolls
+  - Prevents false triggers since a "1" on the dice could be 1, 11, 21, 31, etc.
+  - You must explicitly set `threat:` and `error:` for d100 rolls
+
+### v1.1.0
+
+- **Roll-Under System Support**: Full support for systems where low rolls are good (Call of Cthulhu, GURPS, etc.)
+  - Use `threat:NL` to trigger critical animations on low rolls (e.g., `threat:5L` = 1-5)
+  - Use `error:NH` to trigger failure animations on high rolls (e.g., `error:95H` = 95-100)
+- Improved range calculation logic for edge cases
+- Better documentation with roll-over vs roll-under examples
 
 ### v1.0.0
 
