@@ -42,16 +42,7 @@ Hooks.once("init", async function () {
 
 Hooks.on("diceSoNiceRollStart", (messageId, context) => {
   function rangeArrayFrom(n, m) {
-    return Array.from({ length: m - n + 1 }, (_, index) => `${n + index}`);
-  }
-
-  // Generate array of ALL possible values for a die (1 to faces, or 0-9 for d10)
-  function allValuesFor(faces) {
-    if (faces === 10) {
-      // d10 can show 0-9 or 1-10 depending on the die
-      return ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
-    }
-    return rangeArrayFrom(1, faces);
+    return Array.from({ length: m - n + 1 }, (_, index) => n + index);
   }
 
   function mapConfigIntoDice(dice) {
@@ -92,7 +83,7 @@ Hooks.on("diceSoNiceRollStart", (messageId, context) => {
   }
 
   // Special handling for d100: check if we have a d100 roll with explicit settings
-  // and pre-calculate whether the total is in threat/error range
+  // and determine whether the total is in threat/error range
   function handleD100Roll(diceTerms, flavorText) {
     // Look for d100 dice term
     const d100Term = diceTerms.find(d => d.faces === 100);
@@ -126,14 +117,14 @@ Hooks.on("diceSoNiceRollStart", (messageId, context) => {
       const n = parseInt(groups.threat.raw, 10);
       const dir = groups.threat.dir?.toLowerCase();
       if (dir === "l") {
+        // Explicitly low-anchored: 1 .. n
         threatStart = 1;
         threatEnd = clamp(n);
-      } else if (dir === "h" || n > 50) {
+      } else {
+        // Default or H: high-anchored (n .. 100)
+        // threat:10 means 10-100, not 1-10
         threatStart = clamp(n);
         threatEnd = 100;
-      } else {
-        threatStart = 1;
-        threatEnd = clamp(n);
       }
     }
 
@@ -164,8 +155,6 @@ Hooks.on("diceSoNiceRollStart", (messageId, context) => {
     }
 
     // Handle overlap: explicit threat wins over explicit error if both set
-    // (or we could let both trigger - but typically you want one)
-
     return {
       triggerThreat,
       triggerError,
@@ -178,37 +167,35 @@ Hooks.on("diceSoNiceRollStart", (messageId, context) => {
   const d100Result = handleD100Roll(context.roll.dice, rollFlavor);
 
   for (const dice of context.roll.dice) {
-    // Special handling for d100: apply effects to ALL dice values when total is in range
-    // This makes both the tens and ones dice light up together
+    // Special handling for d100: apply effects based on the actual total rolled
+    // For d100, we apply effects to ALL possible results so both component dice (tens/ones) light up
     if (dice.faces === 100 && d100Result !== null) {
+      // Initialize onResultEffects if needed
       if (typeof dice.options.onResultEffects === "undefined") {
         dice.options.onResultEffects = {};
       }
 
-      // For d100, we apply effects to ALL possible results so both dice light up
-      // when the total is in the target range
-      const allResults = allValuesFor(100);
+      // Generate array of ALL possible values for d100 (so all component dice light up)
+      const allD100Results = rangeArrayFrom(1, 100).map(String);
 
+      // Apply threat effect if total is in threat range
       if (d100Result.triggerThreat && critDice.includes("d100")) {
         dice.options.onResultEffects[
           game.settings.get("dangerously-threatening-dice", "critAnimationName")
         ] = {
-          onResult: allResults
+          onResult: allD100Results
         };
       }
-
-      if (d100Result.triggerError && failDice.includes("d100")) {
-        // Don't apply error if threat already triggered (threat takes priority)
-        if (!d100Result.triggerThreat) {
-          dice.options.onResultEffects[
-            game.settings.get(
-              "dangerously-threatening-dice",
-              "failureAnimationName"
-            )
-          ] = {
-            onResult: allResults
-          };
-        }
+      // Apply error effect if total is in error range (threat takes priority)
+      else if (d100Result.triggerError && failDice.includes("d100")) {
+        dice.options.onResultEffects[
+          game.settings.get(
+            "dangerously-threatening-dice",
+            "failureAnimationName"
+          )
+        ] = {
+          onResult: allD100Results
+        };
       }
 
       // Skip normal processing for d100
@@ -303,135 +290,109 @@ Hooks.on("diceSoNiceRollStart", (messageId, context) => {
     const hasExplicitThreat = groups.threat !== undefined;
     const hasExplicitError = groups.error !== undefined;
 
+    // Helper to clamp a number into 1..faces
+    const clamp = v => Math.max(1, Math.min(dice.faces, v));
+
+    // Initialize onResultEffects if needed
     if (typeof dice.options.onResultEffects === "undefined") {
       dice.options.onResultEffects = {};
     }
 
-    // Helper to clamp a number into 1..faces
-    const clamp = v => Math.max(1, Math.min(dice.faces, v));
-
-    // Calculate threat range first so we can exclude it from error range if needed
+    // Calculate threat range
     let threatStart = null,
       threatEnd = null;
-    // Only calculate threat range if we have explicit or default threat settings (not null)
+
     if (critDice.includes(`d${dice.faces}`) && parsedThreat !== null) {
       if (parsedThreat.dir === "l") {
+        // Explicitly low-anchored: 1 .. n
         threatStart = 1;
         threatEnd = clamp(parsedThreat.n);
       } else if (parsedThreat.dir === "h") {
+        // Explicitly high-anchored
         if (parsedThreat.n > dice.faces / 2) {
+          // Value is high, treat as "from n to max" (e.g., threat:18H on d20 = 18-20)
           threatStart = clamp(parsedThreat.n);
           threatEnd = clamp(dice.faces);
         } else {
+          // Value is low, treat as "top N values" (e.g., threat:3H on d20 = 18-20)
           threatEnd = clamp(dice.faces);
           threatStart = clamp(dice.faces - (parsedThreat.n - 1));
         }
-      } else if (parsedThreat.n <= dice.faces / 2) {
-        threatStart = 1;
-        threatEnd = clamp(parsedThreat.n);
       } else {
+        // No suffix: default is ALWAYS high-anchored for threat (n .. faces)
+        // threat:10 on d20 means 10-20, not 1-10
         threatStart = clamp(parsedThreat.n);
         threatEnd = clamp(dice.faces);
       }
     }
 
-    // Compute error range
-    // Default (roll-over systems): low values are errors (1..n)
-    // With H suffix (roll-under systems): high values are errors (n..faces or top N)
-    // With L suffix: explicitly low-anchored (1..n)
-    // Skip if parsedError is null (d100 with no explicit setting)
+    // Calculate error range
+    let errorStart = null,
+      errorEnd = null;
+
     if (failDice.includes(`d${dice.faces}`) && parsedError !== null) {
-      let start, end;
       if (parsedError.dir === "h") {
-        // Explicitly high-anchored: could mean "top N values" or "from N to max"
-        // If n > faces/2, treat as "from n to faces" (e.g., error:95H on d100 = 95-100)
-        // If n <= faces/2, treat as "top N values" (e.g., error:3H on d20 = 18-20)
+        // Explicitly high-anchored
         if (parsedError.n > dice.faces / 2) {
-          start = clamp(parsedError.n);
-          end = clamp(dice.faces);
-        } else {
-          end = clamp(dice.faces);
-          start = clamp(dice.faces - (parsedError.n - 1));
-        }
-      } else if (parsedError.dir === "l") {
-        // Explicitly low-anchored: 1 .. n
-        start = 1;
-        end = clamp(parsedError.n);
-      } else if (parsedError.autoHigh) {
-        // Auto-detected high anchor (value > faces/2): n .. faces
-        start = clamp(parsedError.n);
-        end = clamp(dice.faces);
-      } else {
-        // Default: low anchored (1 .. n)
-        start = 1;
-        end = clamp(parsedError.n);
-      }
-
-      // Build the error range, but exclude values that overlap with an explicitly set threat range
-      // If user explicitly set threat, those values should NOT trigger error animation
-      let errorResults = rangeArrayFrom(start, end);
-      if (hasExplicitThreat && threatStart !== null && threatEnd !== null) {
-        const threatValues = new Set(rangeArrayFrom(threatStart, threatEnd));
-        errorResults = errorResults.filter(v => !threatValues.has(v));
-      }
-
-      // Only set the effect if there are any error values left after filtering
-      if (errorResults.length > 0) {
-        dice.options.onResultEffects[
-          game.settings.get(
-            "dangerously-threatening-dice",
-            "failureAnimationName"
-          )
-        ] = {
-          onResult: errorResults
-        };
-      }
-    }
-
-    // Compute threat range - use pre-calculated values
-    // Also filter out values that overlap with explicitly set error range
-    if (
-      critDice.includes(`d${dice.faces}`) &&
-      threatStart !== null &&
-      threatEnd !== null
-    ) {
-      // Build the threat range, but exclude values that overlap with an explicitly set error range
-      // If user explicitly set error, those values should NOT trigger threat animation
-      let threatResults = rangeArrayFrom(threatStart, threatEnd);
-
-      if (hasExplicitError && parsedError !== null) {
-        // Calculate error range to exclude
-        let errorStart, errorEnd;
-        if (parsedError.dir === "h") {
-          if (parsedError.n > dice.faces / 2) {
-            errorStart = clamp(parsedError.n);
-            errorEnd = clamp(dice.faces);
-          } else {
-            errorEnd = clamp(dice.faces);
-            errorStart = clamp(dice.faces - (parsedError.n - 1));
-          }
-        } else if (parsedError.dir === "l") {
-          errorStart = 1;
-          errorEnd = clamp(parsedError.n);
-        } else if (parsedError.autoHigh) {
           errorStart = clamp(parsedError.n);
           errorEnd = clamp(dice.faces);
         } else {
-          errorStart = 1;
-          errorEnd = clamp(parsedError.n);
+          errorEnd = clamp(dice.faces);
+          errorStart = clamp(dice.faces - (parsedError.n - 1));
         }
-        const errorValues = new Set(rangeArrayFrom(errorStart, errorEnd));
-        threatResults = threatResults.filter(v => !errorValues.has(v));
+      } else if (parsedError.dir === "l") {
+        // Explicitly low-anchored: 1 .. n
+        errorStart = 1;
+        errorEnd = clamp(parsedError.n);
+      } else if (parsedError.autoHigh) {
+        // Auto-detected high anchor (value > faces/2): n .. faces
+        errorStart = clamp(parsedError.n);
+        errorEnd = clamp(dice.faces);
+      } else {
+        // Default: low anchored (1 .. n)
+        errorStart = 1;
+        errorEnd = clamp(parsedError.n);
       }
+    }
 
-      // Only set the effect if there are any threat values left after filtering
-      if (threatResults.length > 0) {
-        dice.options.onResultEffects[
-          game.settings.get("dangerously-threatening-dice", "critAnimationName")
-        ] = {
-          onResult: threatResults
-        };
+    // Build arrays of result values that should trigger effects
+    // These apply to individual dice within the term (e.g., only some dice in 10d20)
+    let threatResults = [];
+    let errorResults = [];
+
+    if (threatStart !== null && threatEnd !== null) {
+      threatResults = rangeArrayFrom(threatStart, threatEnd);
+    }
+
+    if (errorStart !== null && errorEnd !== null) {
+      errorResults = rangeArrayFrom(errorStart, errorEnd);
+
+      // If user explicitly set threat, exclude threat values from error range
+      if (hasExplicitThreat && threatResults.length > 0) {
+        const threatSet = new Set(threatResults);
+        errorResults = errorResults.filter(v => !threatSet.has(v));
       }
+    }
+
+    // Apply effects using onResultEffects (for individual dice within a term)
+    // Threat takes priority, so apply it first
+    if (threatResults.length > 0) {
+      dice.options.onResultEffects[
+        game.settings.get("dangerously-threatening-dice", "critAnimationName")
+      ] = {
+        onResult: threatResults.map(String)
+      };
+    }
+
+    if (errorResults.length > 0) {
+      dice.options.onResultEffects[
+        game.settings.get(
+          "dangerously-threatening-dice",
+          "failureAnimationName"
+        )
+      ] = {
+        onResult: errorResults.map(String)
+      };
     }
   }
 });

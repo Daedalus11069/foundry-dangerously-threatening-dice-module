@@ -9,9 +9,9 @@
   ],
   "version": "1.0.0",
   "compatibility": {
-    "minimum": "11",
-    "verified": "12",
-    "maximum": "12"
+    "minimum": "13",
+    "verified": "14",
+    "maximum": "14"
   },
   "esmodules": ["main.js"],
   "languages": [
