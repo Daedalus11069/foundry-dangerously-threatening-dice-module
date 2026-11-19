@@ -2,8 +2,7 @@
 
 A Foundry VTT module that adds visual effects to dice rolls based on critical threats and errors, inspired by Fantasy Craft-style mechanics.
 
-> **Important:** This module requires a specific fork of Dice So Nice to function properly.  
-> Use this fork: https://github.com/Daedalus11069/dice-so-nice-fork
+> **Requires** Foundry VTT v14 and the official [Dice So Nice](https://foundryvtt.com/packages/dice-so-nice) 6.4.5 or newer.
 
 ---
 
@@ -34,20 +33,19 @@ This module enhances your Foundry VTT dice rolls by triggering special visual an
 - **Configurable Per Dice Type**: Set which dice types trigger animations
 - **Customizable Animations**: Choose which Dice So Nice animations to play
 
-### Why a Fork?
+### How it works with Dice So Nice
 
-This module uses an experimental approach that could cause crashes in the original Dice So Nice when multiple dice are rolled simultaneously. The forked version includes stability improvements to prevent these issues.
+Dice So Nice applies a forced special effect to a whole die term. To light up only the dice that hit a threat or error value (for example 2 of `10d20`), the module shows Dice So Nice a copy of the roll where such terms are split by outcome. The real roll and its chat total are never changed.
 
 ---
 
 ## Installation
 
-### Step 1: Install the Dice So Nice Fork
+### Step 1: Install Dice So Nice
 
 1. Inside Foundry VTT, go to **Configuration and Setup** → **Add-on Modules**
 2. Click **Install Module**
-3. Enter this manifest URL: `https://github.com/Daedalus11069/dice-so-nice-fork/releases/latest/download/module.json`
-4. Click **Install** and wait for completion
+3. Search for "Dice So Nice" (version 6.4.5 or newer) and click **Install**
 
 ### Step 2: Install Dangerously Threatening Dice
 
@@ -59,7 +57,7 @@ This module uses an experimental approach that could cause crashes in the origin
 
 1. Launch your world
 2. Go to **Settings** → **Manage Modules**
-3. Enable both "Dice So Nice" (the fork) and "Dangerously Threatening Dice"
+3. Enable both "Dice So Nice" and "Dangerously Threatening Dice"
 4. Click **Save Module Settings**
 
 ---
@@ -159,7 +157,7 @@ In roll-over systems, **high rolls are good** and **low rolls are bad**.
 
 In roll-under systems, **low rolls are good** and **high rolls are bad**.
 
-> **Note about d100:** Unlike other dice, d100 has **no default animations**. This is because Dice So Nice often renders d100 as two d10s (tens and ones), and a "1" showing on one die could represent 1, 11, 21, 31, etc. You must explicitly set `threat:` and `error:` values for d100 rolls. When the total IS in the specified range, **both dice will light up** with the animation effect.
+> **Note about d100:** Unlike other dice, d100 has **no default animations**. This is because Dice So Nice often renders d100 as two d10s (tens and ones), and a "1" showing on one die could represent 1, 11, 21, 31, etc. You must add `d100` to the **Crit dice** and/or **Fail dice** settings, and explicitly set `threat:` and `error:` values for d100 rolls. When the total IS in the specified range, **both dice will light up** with the animation effect.
 
 ```
 /roll 1d100[Spot Hidden threat:5L error:95H]
@@ -332,8 +330,8 @@ Any standard polyhedral dice: d4, d6, d8, d10, d12, d20, d100, etc.
 
 ### Compatibility
 
-- **Foundry VTT**: v11 minimum, verified on v12
-- **Dice So Nice**: Requires the forked version (v5.1.9+)
+- **Foundry VTT**: v14
+- **Dice So Nice**: v6.4.5 or newer (official release)
 
 ---
 
@@ -341,9 +339,9 @@ Any standard polyhedral dice: d4, d6, d8, d10, d12, d20, d100, etc.
 
 ### Animations Don't Play
 
-1. Verify you installed the **forked version** of Dice So Nice, not the original
+1. Verify Dice So Nice is version 6.4.5 or newer
 2. Check that both modules are enabled in your world
-3. Ensure the dice type is listed in the module settings (e.g., d20 for d20 rolls)
+3. Ensure the dice type is listed in **both** module settings that apply: **Crit dice** for threats and **Fail dice** for errors. The defaults only include `d20,d12,d10,d8` (crit) and `d20` (fail), so d6, d100 and others must be added by hand
 4. Verify your roll syntax includes the modifiers in square brackets
 
 ### Syntax Not Working
@@ -354,7 +352,7 @@ Any standard polyhedral dice: d4, d6, d8, d10, d12, d20, d100, etc.
 
 ### Multiple Dice Issues
 
-- The fork should handle multiple dice correctly
+- When only some dice of an exploding or rerolled term get an effect, the term is split but every die keeps its original throw, so extra dice still follow the dice that triggered them. The split parts lose their exploded/rerolled flags, so a Dice So Nice effect set to trigger on explosions or rerolls will not fire for them
 - If you experience crashes, please report them on the GitHub repository
 
 ---
@@ -373,7 +371,6 @@ Any standard polyhedral dice: d4, d6, d8, d10, d12, d20, d100, etc.
 ## License & Links
 
 - **Repository:** https://github.com/Daedalus11069/foundry-dangerously-threatening-dice-module
-- **Dice So Nice Fork:** https://github.com/Daedalus11069/dice-so-nice-fork
 - **Issues:** Report bugs on GitHub
 
 ---
@@ -408,4 +405,4 @@ Any standard polyhedral dice: d4, d6, d8, d10, d12, d20, d100, etc.
 - Advanced directional anchoring (H/L suffixes)
 - Auto-detection for high/low ranges
 - Configurable animations per dice type
-- Stable multi-dice rolling with forked Dice So Nice
+- Works with the official Dice So Nice (v6.4.5+)

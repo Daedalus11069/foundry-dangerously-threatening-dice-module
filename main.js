@@ -40,359 +40,297 @@ Hooks.once("init", async function () {
   });
 });
 
-Hooks.on("diceSoNiceRollStart", (messageId, context) => {
-  function rangeArrayFrom(n, m) {
-    return Array.from({ length: m - n + 1 }, (_, index) => n + index);
-  }
+const MODULE_ID = "dangerously-threatening-dice";
+const FLAVOR_REGEX = /(?<key>threat|error):(?<value>\d+)(?<dir>[hHlL])?/gi;
 
-  function mapConfigIntoDice(dice) {
-    if (isNaN(dice)) {
-      return dice;
-    } else {
-      return `d${dice}`;
-    }
-  }
-  const failDice = (
-    game.settings.get("dangerously-threatening-dice", "failDice") || ""
-  )
+function parseDiceList(setting) {
+  return (game.settings.get(MODULE_ID, setting) || "")
     .toLowerCase()
     .split(/, ?/)
     .filter(d => d !== "")
-    .map(mapConfigIntoDice);
-  const critDice = (
-    game.settings.get("dangerously-threatening-dice", "critDice") || ""
-  )
-    .toLowerCase()
-    .split(/, ?/)
-    .filter(d => d !== "")
-    .map(mapConfigIntoDice);
+    .map(d => (isNaN(d) ? d : `d${d}`));
+}
 
-  // Try to get flavor from various sources:
-  // 1. The roll itself
-  // 2. The chat message
-  // 3. Individual dice terms
-  let rollFlavor =
-    context.roll?.options?.flavor || context.roll?.options?.flavour || "";
+function rangeArrayFrom(n, m) {
+  return Array.from({ length: m - n + 1 }, (_, index) => n + index);
+}
 
-  // If no roll flavor, try to get from the chat message
-  if (!rollFlavor && messageId) {
-    const message = game.messages.get(messageId);
-    if (message) {
-      rollFlavor = message.flavor || message.system?.flavor || "";
-    }
-  }
-
-  // Special handling for d100: check if we have a d100 roll with explicit settings
-  // and determine whether the total is in threat/error range
-  function handleD100Roll(diceTerms, flavorText) {
-    // Look for d100 dice term
-    const d100Term = diceTerms.find(d => d.faces === 100);
-    if (!d100Term) return null;
-
-    // Parse flavor for explicit threat/error
-    const reg = /(?<key>threat|error):(?<value>\d+)(?<dir>[hHlL])?/gi;
-    let match;
-    const groups = {};
-    reg.lastIndex = 0;
-    while ((match = reg.exec(flavorText)) !== null) {
-      if (!match.groups) continue;
-      const key = match.groups.key.toLowerCase();
-      groups[key] = { raw: match.groups.value, dir: match.groups.dir };
-    }
-
-    // If no explicit settings, d100 has no effects
-    if (!groups.threat && !groups.error) return null;
-
-    // Get the actual rolled total
-    const total = d100Term.total;
-
-    // Calculate ranges
-    const clamp = v => Math.max(1, Math.min(100, v));
-    let threatStart = null,
-      threatEnd = null;
-    let errorStart = null,
-      errorEnd = null;
-
-    if (groups.threat) {
-      const n = parseInt(groups.threat.raw, 10);
-      const dir = groups.threat.dir?.toLowerCase();
-      if (dir === "l") {
-        // Explicitly low-anchored: 1 .. n
-        threatStart = 1;
-        threatEnd = clamp(n);
-      } else {
-        // Default or H: high-anchored (n .. 100)
-        // threat:10 means 10-100, not 1-10
-        threatStart = clamp(n);
-        threatEnd = 100;
-      }
-    }
-
-    if (groups.error) {
-      const n = parseInt(groups.error.raw, 10);
-      const dir = groups.error.dir?.toLowerCase();
-      if (dir === "h" || n > 50) {
-        errorStart = clamp(n);
-        errorEnd = 100;
-      } else if (dir === "l") {
-        errorStart = 1;
-        errorEnd = clamp(n);
-      } else {
-        errorStart = 1;
-        errorEnd = clamp(n);
-      }
-    }
-
-    // Determine which effect should trigger based on actual total
-    let triggerThreat = false;
-    let triggerError = false;
-
-    if (threatStart !== null && total >= threatStart && total <= threatEnd) {
-      triggerThreat = true;
-    }
-    if (errorStart !== null && total >= errorStart && total <= errorEnd) {
-      triggerError = true;
-    }
-
-    // Handle overlap: explicit threat wins over explicit error if both set
-    return {
-      triggerThreat,
-      triggerError,
-      hasExplicitThreat: !!groups.threat,
-      hasExplicitError: !!groups.error
+function parseFlavor(flavorText) {
+  const groups = {};
+  for (const match of flavorText.matchAll(FLAVOR_REGEX)) {
+    groups[match.groups.key.toLowerCase()] = {
+      raw: match.groups.value,
+      dir: match.groups.dir?.toLowerCase() ?? null
     };
   }
+  return groups;
+}
 
-  // Check for d100 special handling
-  const d100Result = handleD100Roll(context.roll.dice, rollFlavor);
+/**
+ * Support modifiers in the flavor like: threat:19 error:3
+ * An optional H/L suffix anchors the value at the high or low end:
+ *   threat:18   -> default: 18 .. faces (high is good)
+ *   threat:5L   -> low-anchored (roll-under): 1 .. 5
+ *   threat:3H   -> top 3 values (faces-2 .. faces)
+ *   error:3     -> default: 1 .. 3 (low is bad)
+ *   error:95H   -> high-anchored: 95 .. faces
+ *   error:3H    -> top 3 values (faces-2 .. faces)
+ * Without a suffix, values > faces/2 on error auto-detect as high-anchored.
+ * d100 has no default effects: the values must be explicit.
+ *
+ * Returns { threat: [start, end] | null, error: [start, end] | null }
+ */
+function computeRanges(faces, groups, enabled) {
+  const clamp = v => Math.max(1, Math.min(faces, v));
+  const isD100 = faces === 100;
 
-  for (const dice of context.roll.dice) {
-    // Special handling for d100: apply effects based on the actual total rolled
-    // For d100, we apply effects to ALL possible results so both component dice (tens/ones) light up
-    if (dice.faces === 100 && d100Result !== null) {
-      // Initialize onResultEffects if needed
-      if (typeof dice.options.onResultEffects === "undefined") {
-        dice.options.onResultEffects = {};
-      }
+  const parse = (pair, isThreat) => {
+    if (!pair) {
+      if (isD100) return null;
+      return { n: isThreat ? faces : 1, dir: null, defaulted: true };
+    }
+    let n = parseInt(pair.raw, 10);
+    if (isNaN(n) || n <= 0) n = isThreat ? faces : 1;
+    return { n, dir: pair.dir, defaulted: false };
+  };
 
-      // Generate array of ALL possible values for d100 (so all component dice light up)
-      const allD100Results = rangeArrayFrom(1, 100).map(String);
+  // top-N or n..max for a high anchor
+  const highRange = n =>
+    n > faces / 2 || isD100
+      ? [clamp(n), faces]
+      : [clamp(faces - (n - 1)), faces];
 
-      // Apply threat effect if total is in threat range
-      if (d100Result.triggerThreat && critDice.includes("d100")) {
-        dice.options.onResultEffects[
-          game.settings.get("dangerously-threatening-dice", "critAnimationName")
-        ] = {
-          onResult: allD100Results
-        };
-      }
-      // Apply error effect if total is in error range (threat takes priority)
-      else if (d100Result.triggerError && failDice.includes("d100")) {
-        dice.options.onResultEffects[
-          game.settings.get(
-            "dangerously-threatening-dice",
-            "failureAnimationName"
-          )
-        ] = {
-          onResult: allD100Results
-        };
-      }
+  let threat = null;
+  if (enabled.crit) {
+    const p = parse(groups.threat, true);
+    if (p) {
+      if (p.dir === "l") threat = [1, clamp(p.n)];
+      else if (p.dir === "h") threat = highRange(p.n);
+      else threat = [clamp(p.n), faces];
+    }
+  }
 
-      // Skip normal processing for d100
+  let error = null;
+  if (enabled.fail) {
+    const p = parse(groups.error, false);
+    if (p) {
+      if (p.dir === "h") error = highRange(p.n);
+      else if (p.dir === "l") error = [1, clamp(p.n)];
+      else if (!p.defaulted && p.n > faces / 2) error = [clamp(p.n), faces];
+      else error = [1, clamp(p.n)];
+    }
+  }
+
+  return { threat, error };
+}
+
+const inRange = (range, v) => range !== null && v >= range[0] && v <= range[1];
+
+/**
+ * Dice So Nice applies `options.sfx` to a whole term, so to light up only some
+ * dice of a term (e.g. 2 of 10d20) we show a copy of the roll where such terms
+ * are split into one term per effect. The real roll is never modified.
+ */
+const isRealReroll = r => !!r?.rerolled && !r.active && !r.discarded;
+const triggersThrow = r => !!r?.exploded || isRealReroll(r);
+
+/**
+ * Mirrors how Dice So Nice numbers the throws of a term: dice that exploded or
+ * were rerolled make the dice that follow them wait for a later throw.
+ */
+function throwIndices(results) {
+  let cnt = results.filter(r => !triggersThrow(r)).length;
+  let extra = 0;
+  let t = 0;
+  return results.map(r => {
+    if (triggersThrow(r)) extra++;
+    const index = t;
+    if (r.hidden && (r.discarded || r.rerolled)) return index;
+    if (--cnt <= 0) {
+      t++;
+      cnt = extra;
+      extra = 0;
+    }
+    return index;
+  });
+}
+
+/**
+ * Builds the results of a sub-term whose dice must keep the throw they had in
+ * the original term. Dice So Nice only knows a term's throws from the
+ * exploded/rerolled flags of its results, so we rewrite them: each throw gets
+ * as many flagged entries as the next throw has dice. Invisible hidden
+ * entries (never created as dice) pad a throw when needed.
+ */
+function buildSequencedResults(entries) {
+  const maxT = Math.max(...entries.map(e => e.t));
+  const reals = Array.from({ length: maxT + 1 }, () => []);
+  for (const { r, t } of entries) {
+    const copy = foundry.utils.deepClone(r);
+    delete copy.exploded;
+    delete copy.rerolled;
+    reals[t].push(copy);
+  }
+
+  // padders needed per throw, computed from the last throw backwards
+  const sizes = new Array(maxT + 1);
+  const padders = new Array(maxT + 1);
+  for (let t = maxT; t >= 0; t--) {
+    const next = t === maxT ? 0 : sizes[t + 1];
+    padders[t] = Math.max(next, reals[t].length === 0 ? 1 : 0);
+    sizes[t] = reals[t].length + padders[t];
+  }
+
+  const out = [];
+  for (let t = 0; t <= maxT; t++) {
+    out.push(...reals[t]);
+    const marked = t === maxT ? 0 : sizes[t + 1];
+    for (let p = 0; p < padders[t]; p++) {
+      out.push({
+        result: 1,
+        active: true,
+        hidden: true,
+        ...(p < marked ? { exploded: true } : {})
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Dice So Nice applies `options.sfx` to a whole term, so to light up only some
+ * dice of a term (e.g. 2 of 10d20) we show a copy of the roll where such terms
+ * are split into one term per effect. The real roll is never modified.
+ * `results` are the term's results, or the entries to rebuild with their
+ * throws kept (see buildSequencedResults).
+ */
+function cloneTerm(term, results, sequenced = false) {
+  const clone = foundry.dice.terms.RollTerm.fromData(term.toJSON());
+  const shown = sequenced ? results.map(e => e.r) : results;
+  clone.results = sequenced
+    ? buildSequencedResults(results)
+    : results.map(r => foundry.utils.deepClone(r));
+  clone.number = shown.length;
+  const total = shown.reduce(
+    (sum, r) => (r.active === false || r.discarded ? sum : sum + r.result),
+    0
+  );
+  Object.defineProperty(clone, "total", { value: total, configurable: true });
+  clone.options = foundry.utils.deepClone(term.options ?? {});
+  return clone;
+}
+
+Hooks.on("diceSoNiceRollStart", (messageId, context) => {
+  try {
+    applyThreatEffects(messageId, context);
+  } catch (err) {
+    // never let this module stop the dice from rolling
+    console.error(
+      "Dangerously Threatening Dice | failed to apply effects",
+      err
+    );
+  }
+});
+
+function applyThreatEffects(messageId, context) {
+  const sourceRoll = context.dsnRoll || context.roll;
+  if (!sourceRoll) return;
+
+  const critName = game.settings.get(MODULE_ID, "critAnimationName");
+  const failName = game.settings.get(MODULE_ID, "failureAnimationName");
+  const failDice = parseDiceList("failDice");
+  const critDice = parseDiceList("critDice");
+
+  // Try to get flavor from the roll, then the chat message
+  let rollFlavor =
+    sourceRoll.options?.flavor || sourceRoll.options?.flavour || "";
+  if (!rollFlavor && messageId) {
+    const message = game.messages.get(messageId);
+    if (message) rollFlavor = message.flavor || message.system?.flavor || "";
+  }
+
+  let changed = false;
+  const newDice = [];
+
+  for (const term of sourceRoll.dice) {
+    const faces = term.faces;
+    const enabled = {
+      crit: critDice.includes(`d${faces}`),
+      fail: failDice.includes(`d${faces}`)
+    };
+    const results = term.results ?? [];
+    if ((!enabled.crit && !enabled.fail) || !results.length) {
+      newDice.push(term);
       continue;
     }
 
-    // Support modifiers in the flavor like: threat:19 error:3
-    // Extended syntax supports an optional H/L suffix to anchor the value at the high or low end:
-    //   threat:18   -> default behavior (roll-over): 18 .. faces (high is good)
-    //   threat:5L   -> low-anchored (roll-under): 1 .. 5 (low is good)
-    //   threat:3H   -> high-anchored: top 3 values (faces-2 .. faces)
-    //   error:3     -> default behavior: 1 .. 3 (low is bad)
-    //   error:95H   -> high-anchored (roll-under): 95 .. faces (high is bad)
-    //   error:3H    -> forces high-end: top 3 values (faces-2 .. faces)
-    //
-    // Roll-under system examples (like Call of Cthulhu where low=success, high=fumble):
-    //   /roll 1d100[Spot Hidden threat:5L error:95H]
-    //   -> threat (crit): 1-5 (rolling low is critical success)
-    //   -> error (fumble): 95-100 (rolling high is critical failure)
-    //
-    // Roll-over system examples (like D&D where high=success, low=fumble):
-    //   /roll 1d20[Attack threat:20 error:1]
-    //   -> threat (crit): 20 (rolling high is critical)
-    //   -> error (fumble): 1 (rolling low is failure)
-    //
-    // If no suffix is provided, the module uses smart defaults:
-    //   - threat defaults to high-end (roll-over style)
-    //   - error defaults to low-end (roll-over style)
-    //   - Values > faces/2 auto-detect as high-anchored
-
-    const reg = /(?<key>threat|error):(?<value>\d+)(?<dir>[hHlL])?/gi;
-    let match;
-    const groups = {};
-
-    // Get the flavor text from wherever it might be stored
-    // Check dice-level flavor first, then fall back to roll-level flavor
+    // dice flavor first, then fall back to the roll flavor
     const flavorText =
-      dice.flavor ||
-      dice.flavour ||
-      dice.options?.flavor ||
-      dice.options?.flavour ||
+      term.flavor ||
+      term.flavour ||
+      term.options?.flavor ||
+      term.options?.flavour ||
       rollFlavor ||
       "";
+    const groups = parseFlavor(flavorText);
+    const { threat, error } = computeRanges(faces, groups, enabled);
 
-    // Reset regex lastIndex before exec loop (important for global regexes)
-    reg.lastIndex = 0;
+    // Threat takes priority; an explicit threat also removes its values from error
+    const classify = value => {
+      if (inRange(threat, value)) return "crit";
+      if (inRange(error, value)) return "fail";
+      return null;
+    };
 
-    while ((match = reg.exec(flavorText)) !== null) {
-      if (!match.groups) continue;
-      const key = match.groups.key.toLowerCase();
-      const rawValue = match.groups.value;
-      const dir = match.groups.dir;
-      groups[key] = { raw: rawValue, dir };
+    const kinds = results.map(r => classify(r.result));
+    if (kinds.every(k => k === null)) {
+      newDice.push(term);
+      continue;
     }
 
-    // parse numeric values and direction
-    // Returns: { n: number, dir: 'h'|'l'|null, autoHigh: boolean, autoLow: boolean } or null for d100 defaults
-    function parsePair(pair, faces, defaultIsThreat) {
-      if (!pair || typeof pair.raw === "undefined") {
-        // No value specified - use defaults for basic functionality
-        // EXCEPT for d100: don't apply defaults because the d10 dice showing "1"
-        // could be 1, 11, 21, 31... not necessarily a natural 1 or 100
-        if (faces === 100) {
-          return null; // No default effects for d100 - must be explicitly set
-        }
-        // error defaults to 1 (fumble on natural 1)
-        // threat defaults to faces (crit on max roll)
-        return {
-          n: defaultIsThreat ? faces : 1,
-          dir: null,
-          autoHigh: defaultIsThreat, // threat is high by default
-          autoLow: !defaultIsThreat // error is low by default
-        };
-      }
-      let n = window.parseInt(pair.raw, 10);
-      if (isNaN(n) || n <= 0) {
-        n = defaultIsThreat ? faces : 1;
-      }
-      const dir = pair.dir ? pair.dir.toLowerCase() : null;
-      // auto-detect anchoring if value > faces/2 and no explicit dir
-      // For error: high value without dir = auto high-anchored (e.g., error:95 on d100)
-      // For threat: high value without dir = already high (default behavior)
-      const autoHigh = !dir && n > faces / 2;
-      const autoLow = !dir && n <= faces / 2;
-      return { n, dir, autoHigh, autoLow };
+    const effectFor = kind => (kind === "crit" ? critName : failName);
+    const hasChain = results.some(r => r.exploded || r.rerolled);
+    const allSame = kinds.every(k => k === kinds[0]);
+
+    // Every die has the same outcome: no split needed
+    if (allSame) {
+      const clone = cloneTerm(term, results);
+      clone.options.sfx ??= { specialEffect: effectFor(kinds[0]), options: {} };
+      newDice.push(clone);
+      changed = true;
+      continue;
     }
 
-    const parsedError = parsePair(groups.error, dice.faces, false);
-    const parsedThreat = parsePair(groups.threat, dice.faces, true);
-
-    // Track if user explicitly set threat or error (vs using defaults)
-    const hasExplicitThreat = groups.threat !== undefined;
-    const hasExplicitError = groups.error !== undefined;
-
-    // Helper to clamp a number into 1..faces
-    const clamp = v => Math.max(1, Math.min(dice.faces, v));
-
-    // Initialize onResultEffects if needed
-    if (typeof dice.options.onResultEffects === "undefined") {
-      dice.options.onResultEffects = {};
+    // Mixed term: one sub-term per outcome, keeping the original order
+    // (hidden dice that were discarded/rerolled are never shown, so they are dropped)
+    const throws = hasChain ? throwIndices(results) : null;
+    for (const kind of ["crit", "fail", null]) {
+      const subset = hasChain
+        ? results
+            .map((r, i) => ({ r, t: throws[i], kind: kinds[i] }))
+            .filter(
+              e =>
+                e.kind === kind &&
+                !(e.r.hidden && (e.r.discarded || e.r.rerolled))
+            )
+        : results.filter((_, i) => kinds[i] === kind);
+      if (!subset.length) continue;
+      const clone = cloneTerm(term, subset, hasChain);
+      if (kind)
+        clone.options.sfx ??= { specialEffect: effectFor(kind), options: {} };
+      newDice.push(clone);
     }
-
-    // Calculate threat range
-    let threatStart = null,
-      threatEnd = null;
-
-    if (critDice.includes(`d${dice.faces}`) && parsedThreat !== null) {
-      if (parsedThreat.dir === "l") {
-        // Explicitly low-anchored: 1 .. n
-        threatStart = 1;
-        threatEnd = clamp(parsedThreat.n);
-      } else if (parsedThreat.dir === "h") {
-        // Explicitly high-anchored
-        if (parsedThreat.n > dice.faces / 2) {
-          // Value is high, treat as "from n to max" (e.g., threat:18H on d20 = 18-20)
-          threatStart = clamp(parsedThreat.n);
-          threatEnd = clamp(dice.faces);
-        } else {
-          // Value is low, treat as "top N values" (e.g., threat:3H on d20 = 18-20)
-          threatEnd = clamp(dice.faces);
-          threatStart = clamp(dice.faces - (parsedThreat.n - 1));
-        }
-      } else {
-        // No suffix: default is ALWAYS high-anchored for threat (n .. faces)
-        // threat:10 on d20 means 10-20, not 1-10
-        threatStart = clamp(parsedThreat.n);
-        threatEnd = clamp(dice.faces);
-      }
-    }
-
-    // Calculate error range
-    let errorStart = null,
-      errorEnd = null;
-
-    if (failDice.includes(`d${dice.faces}`) && parsedError !== null) {
-      if (parsedError.dir === "h") {
-        // Explicitly high-anchored
-        if (parsedError.n > dice.faces / 2) {
-          errorStart = clamp(parsedError.n);
-          errorEnd = clamp(dice.faces);
-        } else {
-          errorEnd = clamp(dice.faces);
-          errorStart = clamp(dice.faces - (parsedError.n - 1));
-        }
-      } else if (parsedError.dir === "l") {
-        // Explicitly low-anchored: 1 .. n
-        errorStart = 1;
-        errorEnd = clamp(parsedError.n);
-      } else if (parsedError.autoHigh) {
-        // Auto-detected high anchor (value > faces/2): n .. faces
-        errorStart = clamp(parsedError.n);
-        errorEnd = clamp(dice.faces);
-      } else {
-        // Default: low anchored (1 .. n)
-        errorStart = 1;
-        errorEnd = clamp(parsedError.n);
-      }
-    }
-
-    // Build arrays of result values that should trigger effects
-    // These apply to individual dice within the term (e.g., only some dice in 10d20)
-    let threatResults = [];
-    let errorResults = [];
-
-    if (threatStart !== null && threatEnd !== null) {
-      threatResults = rangeArrayFrom(threatStart, threatEnd);
-    }
-
-    if (errorStart !== null && errorEnd !== null) {
-      errorResults = rangeArrayFrom(errorStart, errorEnd);
-
-      // If user explicitly set threat, exclude threat values from error range
-      if (hasExplicitThreat && threatResults.length > 0) {
-        const threatSet = new Set(threatResults);
-        errorResults = errorResults.filter(v => !threatSet.has(v));
-      }
-    }
-
-    // Apply effects using onResultEffects (for individual dice within a term)
-    // Threat takes priority, so apply it first
-    if (threatResults.length > 0) {
-      dice.options.onResultEffects[
-        game.settings.get("dangerously-threatening-dice", "critAnimationName")
-      ] = {
-        onResult: threatResults.map(String)
-      };
-    }
-
-    if (errorResults.length > 0) {
-      dice.options.onResultEffects[
-        game.settings.get(
-          "dangerously-threatening-dice",
-          "failureAnimationName"
-        )
-      ] = {
-        onResult: errorResults.map(String)
-      };
-    }
+    changed = true;
   }
-});
+
+  if (!changed) return;
+
+  const dsnRoll = sourceRoll.constructor.fromData(sourceRoll.toJSON());
+  dsnRoll.secret = sourceRoll.secret;
+  dsnRoll.ghost = sourceRoll.ghost;
+  Object.defineProperty(dsnRoll, "dice", {
+    value: newDice,
+    configurable: true
+  });
+  context.dsnRoll = dsnRoll;
+}

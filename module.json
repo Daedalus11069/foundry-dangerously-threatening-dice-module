@@ -9,9 +9,8 @@
   ],
   "version": "1.0.0",
   "compatibility": {
-    "minimum": "13",
-    "verified": "14",
-    "maximum": "14"
+    "minimum": "14",
+    "verified": "14"
   },
   "esmodules": ["main.js"],
   "languages": [
@@ -28,10 +27,9 @@
     "requires": [
       {
         "id": "dice-so-nice",
-        "manifest": "https://github.com/Daedalus11069/dice-so-nice-fork/releases/latest/download/module.json",
         "type": "module",
         "compatibility": {
-          "verified": "5.1.9"
+          "minimum": "6.4.5"
         }
       }
     ]
